@@ -9,11 +9,14 @@ import ARKit
 import SceneKit
 import UIKit
 
-class ViewController: UIViewController, ARSCNViewDelegate {
+class ViewController: UIViewController, ARSCNViewDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
     
     @IBOutlet var sceneView: ARSCNView!
     
     @IBOutlet weak var blurView: UIVisualEffectView!
+    
+    var cameraUIImage: UIImage!
+    var cameraARRefImage: ARReferenceImage!
     
     /// The view controller that displays the status and "restart experience" UI.
     lazy var statusViewController: StatusViewController = {
@@ -33,7 +36,7 @@ class ViewController: UIViewController, ARSCNViewDelegate {
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        
+ 
         sceneView.delegate = self
         sceneView.session.delegate = self
 
@@ -43,14 +46,57 @@ class ViewController: UIViewController, ARSCNViewDelegate {
         }
     }
 
-	override func viewDidAppear(_ animated: Bool) {
+    @IBAction func getPicture(_ sender: UIButton) {
+        
+        let imagePickerController = UIImagePickerController()
+
+        imagePickerController.sourceType = .camera
+        imagePickerController.delegate = self
+        
+        present(imagePickerController, animated: true, completion: nil)
+    }
+    
+    // Assign the camera pic photo to global cameraImage variable
+    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any])
+    {
+        cameraUIImage = info[.originalImage] as? UIImage
+        dismiss(animated: true, completion: nil)
+        addARReferenceImageFromCamera()
+    }
+    
+    // Convert CIImage to ARReferenceImage
+    func addARReferenceImageFromCamera () {
+        
+        guard let imageToCIImage = CIImage(image: cameraUIImage),
+            let cgImage = convertCIImageToCGImage(inputImage: imageToCIImage) else { return }
+        let arImage = ARReferenceImage(cgImage, orientation: CGImagePropertyOrientation.up, physicalWidth: 0.22) // assuming A4 page
+        
+        arImage.name = "TheTextbookPage"
+        cameraARRefImage = arImage
+        // arConfig.trackingImages = [arImage]
+    }
+    
+    // Convert CIImage to CGI image
+    func convertCIImageToCGImage(inputImage: CIImage) -> CGImage? {
+        let context = CIContext(options: nil)
+        if let cgImage = context.createCGImage(inputImage, from: inputImage.extent) {
+            return cgImage
+        }
+        return nil
+    }
+    
+    override func viewDidAppear(_ animated: Bool) {
 		super.viewDidAppear(animated)
 		
 		// Prevent the screen from being dimmed to avoid interuppting the AR experience.
 		UIApplication.shared.isIdleTimerDisabled = true
-
+        
+        if cameraARRefImage != nil {
+            
         // Start the AR experience
         resetTracking()
+            
+        } else{("error") }
 	}
 	
 	override func viewWillDisappear(_ animated: Bool) {
@@ -68,12 +114,15 @@ class ViewController: UIViewController, ARSCNViewDelegate {
     /// - Tag: ARReferenceImage-Loading
 	func resetTracking() {
         
-        guard let referenceImages = ARReferenceImage.referenceImages(inGroupNamed: "AR Resources", bundle: nil) else {
-            fatalError("Missing expected asset catalog resources.")
+        
+        guard let referenceImages = cameraARRefImage  else { (fatalError("wat \(cameraARRefImage)"))/*  ARReferenceImage.referenceImages(inGroupNamed: "AR Resources", bundle: nil) else {
+
+            fatalError("Missing expected asset catalog resources. \(cameraARRefImage)") */
         }
+    
         
         let configuration = ARWorldTrackingConfiguration()
-        configuration.detectionImages = referenceImages
+        configuration.detectionImages = [referenceImages]
         session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
 
         statusViewController.scheduleMessage("Look around to detect images", inSeconds: 7.5, messageType: .contentPlacement)
@@ -122,8 +171,9 @@ class ViewController: UIViewController, ARSCNViewDelegate {
             .fadeOpacity(to: 0.85, duration: 0.25),
             .fadeOpacity(to: 0.15, duration: 0.25),
             .fadeOpacity(to: 0.85, duration: 0.25),
-            .fadeOut(duration: 0.5),
+            /* .fadeOut(duration: 0.5),
             .removeFromParentNode()
+            */
         ])
     }
 }
